@@ -8,6 +8,14 @@ from PySide6.QtWidgets import (
 class JanelaPrincipal(QWidget):
     def __init__(self):
         super().__init__()
+        
+    def registrar_visita(self):
+        self.mensagem.setText("Clique identificado. Ainda sem registro.")
+
+    def limpar_campos(self):
+        self.campo_nome.clear()
+        self.combo_destino.setCurrentIndex(0)
+        self.campo_nome.setFocus()
 
         self.setWindowTitle("Registro de Visitantes")
         self.resize(520, 460)
@@ -40,4 +48,8 @@ class JanelaPrincipal(QWidget):
         layout.addWidget(QLabel("Visitantes Registrados:"))
         layout.addWidget(self.lista)
         layout.addWidget(self.contador)
-        self.setLayout(layout)        
+        self.setLayout(layout)  
+
+
+        self.botao_cadastrar.clicked.connect(self.registrar_visita)
+        self.botao_limpar.clicked.connect(self.limpar_campos)      
