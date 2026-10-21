@@ -20,7 +20,7 @@ Aplicação desktop desenvolvida em Python com PySide6 para registrar visitantes
 ### 1. Clonar o repositório
 
 ```bash
-git clone URL_DO_REPOSITORIO
+git clone https://github.com/nureyevDev/UC05-Desenvolvimento-Descktop.git
 cd UC05-Desenvolvimento-Desktop
 ```
 
