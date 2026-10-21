@@ -62,26 +62,47 @@ class JanelaPrincipal(QWidget):
         self.botao_limpar.clicked.connect(self.limpar_campos)
 
     def registrar_visita(self):
-        nome = self.campo_nome.text()
+        nome = self.campo_nome.text().strip()
         destino = self.combo_destino.currentText()
 
-        registro = {
+        if not nome:
+            self.mensagem.setText(
+                "Atenção: informe o nome do visitante."
+            )
+            self.mensagem.setStyleSheet(
+                "color: #9b2e1b; font-weight: 600;"
+            )
+            self.campo_nome.setFocus()
+            return
+
+        if self.combo_destino.currentIndex() == 0:
+            self.mensagem.setText(
+                "Atenção: selecione o setor de destino."
+            )
+            self.mensagem.setStyleSheet(
+                "color: #9b2e1b; font-weight: 600;"
+            )
+            self.combo_destino.setFocus()
+            return
+
+            registro = {
             "nome": nome,
             "destino": destino,
         }
 
-        self.registros.append(registro)
-        self.lista.addItem(f"{nome} → {destino}")
+            self.registros.append(registro)
+            self.lista.addItem(f"{nome} → {destino}")
 
-        self.contador.setText(
+            self.contador.setText(
             f"Visitas nesta sessão: {len(self.registros)}"
         )
 
-        self.mensagem.setText(
-            "Registro adicionado (ainda sem validação)."
+            self.mensagem.setText("Sucesso: visita registrada.")
+            self.mensagem.setStyleSheet(
+            "color: #126341; font-weight: 600;"
         )
 
-        self.limpar_campos()
+            self.limpar_campos()
 
     def limpar_campos(self):
         self.campo_nome.clear()
