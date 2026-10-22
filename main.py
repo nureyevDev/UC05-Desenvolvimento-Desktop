@@ -1,8 +1,7 @@
 import sys
 
 from PySide6.QtWidgets import QApplication
-from views.janela_principal import JanelaPrincipal
-
+from portaria.ui.janela_principal import JanelaPrincipal
 
 def main():
     app = QApplication(sys.argv)

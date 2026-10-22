@@ -75,18 +75,25 @@ class JanelaPrincipal(QWidget):
                 "Atenção: selecione o setor de destino."
             )  
             return
-        
-        registro = {"nome": nome,"destino": destino}
+
+            registro = {
+            "nome": nome,
+            "destino": destino,
+        }
 
         self.registros.append(registro)
         self.lista.addItem(f"{nome} → {destino}")
 
-        self.contador.setText(
-        f"Visitas nesta sessão: {len(self.registros)}"
+            self.contador.setText(
+            f"Visitas nesta sessão: {len(self.registros)}"
         )
 
-        self.mensagem.setText("Sucesso: visita registrada.")
-        self.limpar_campos()
+            self.mensagem.setText("Sucesso: visita registrada.")
+            self.mensagem.setStyleSheet(
+            "color: #126341; font-weight: 600;"
+        )
+
+            self.limpar_campos()
 
     def limpar_campos(self):
         self.campo_nome.clear()
