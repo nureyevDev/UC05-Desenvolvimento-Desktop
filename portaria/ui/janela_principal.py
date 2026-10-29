@@ -20,8 +20,7 @@ CRACHAS = [f"V-{n:02d}" for n in range(1, 11)]
 COLUNAS = ["Visita", "Nome", "CPF", "Setor", "Crachá", "Entrada"]
 
 
-def somente_digitos(texto):
-    return "".join(c for c in texto if c.isdigit())
+from portaria.validacao import cpf_valido, mascarar_documento, normalizar_documento
 
 
 class JanelaPrincipal(QWidget):
@@ -30,13 +29,13 @@ class JanelaPrincipal(QWidget):
         self.setWindowTitle("Portaria Digital")
         self.resize(820, 520)
 
-        # Estado em memória: ainda some quando a aplicação fecha.
-        self.visitantes = {}                 # cpf -> nome
-        self.visitas = []                    # lista de dicionários
-        self.crachas_livres = list(CRACHAS)  # crachás na gaveta da recepção
+    
+        self.visitantes = {}                 
+        self.visitas = []                    
+        self.crachas_livres = list(CRACHAS)  
         self.proximo_id = 1
 
-        # ---------- formulário de entrada ----------
+        
         self.campo_cpf = QLineEdit()
         self.campo_cpf.setPlaceholderText("Somente números")
         self.campo_cpf.setMaxLength(14)
@@ -57,7 +56,7 @@ class JanelaPrincipal(QWidget):
         botoes.addWidget(self.botao_entrada)
         botoes.addWidget(self.botao_limpar)
 
-        # ---------- quem está no prédio ----------
+       
         self.campo_filtro = QLineEdit()
         self.campo_filtro.setPlaceholderText("Filtrar por nome ou setor")
         self.tabela = QTableWidget(0, len(COLUNAS))
@@ -81,7 +80,7 @@ class JanelaPrincipal(QWidget):
         layout.addWidget(self.contador)
         self.setLayout(layout)
 
-        # ---------- eventos ----------
+       
         self.campo_cpf.editingFinished.connect(self.buscar_visitante)
         self.botao_entrada.clicked.connect(self.registrar_entrada)
         self.botao_limpar.clicked.connect(self.limpar_campos)
@@ -91,17 +90,21 @@ class JanelaPrincipal(QWidget):
         self.atualizar_tabela()
 
     def buscar_visitante(self):
-        cpf = somente_digitos(self.campo_cpf.text())
+        cpf = normalizar_documento(self.campo_cpf.text())
         if cpf in self.visitantes:
             self.campo_nome.setText(self.visitantes[cpf])
+            self.campo_nome.setReadOnly(True)
             self.mensagem.setText("Visitante já cadastrado. Escolha o setor.")
+        else:
+            self.campo_nome.setReadOnly(False)
+
 
     def registrar_entrada(self):
-        cpf = somente_digitos(self.campo_cpf.text())
+        cpf = normalizar_documento(self.campo_cpf.text())
         nome = " ".join(self.campo_nome.text().split())
 
-        if len(cpf) != 11:
-            self.mensagem.setText("O CPF precisa ter 11 dígitos.")
+        if not cpf_valido(cpf):
+            self.mensagem.setText("CPF inválido. Confira os 11 dígitos.")
             self.campo_cpf.setFocus()
             return
         if not nome:
@@ -111,9 +114,13 @@ class JanelaPrincipal(QWidget):
         if self.combo_setor.currentIndex() == 0:
             self.mensagem.setText("Selecione o setor de destino.")
             return
+        if any(v["cpf"] == cpf for v in self.presentes()):
+            self.mensagem.setText(f"{nome} já está no prédio. Registre a saída antes.")
+            return
         if not self.crachas_livres:
             self.mensagem.setText("Não há crachá disponível. Aguarde uma devolução.")
             return
+
 
         self.visitantes[cpf] = nome
         cracha = self.crachas_livres.pop(0)
@@ -136,7 +143,7 @@ class JanelaPrincipal(QWidget):
         if linha < 0:
             self.mensagem.setText("Selecione uma visita na tabela.")
             return
-        visita_id = int(self.tabela.item(linha, 0).text())
+            visita_id = int(self.tabela.item(linha, 0).text())
         for visita in self.visitas:
             if visita["id"] == visita_id:
                 visita["saida"] = datetime.now().strftime("%H:%M:%S")
@@ -151,20 +158,40 @@ class JanelaPrincipal(QWidget):
     def atualizar_tabela(self):
         termo = self.campo_filtro.text().strip().lower()
         linhas = []
+
         for v in self.presentes():
-            texto = f"{self.visitantes[v['cpf']]} {v['setor']}".lower()
+            texto = (
+                f"{self.visitantes[v['cpf']]} {v['setor']}"
+                .lower()
+            )
+
             if termo in texto:
                 linhas.append(v)
 
         self.tabela.setRowCount(len(linhas))
+
         for i, v in enumerate(linhas):
-            valores = [v["id"], self.visitantes[v["cpf"]], v["cpf"],
-                       v["setor"], v["cracha"], v["entrada"]]
+            valores = [
+                v["id"],
+                self.visitantes[v["cpf"]],
+                mascarar_documento(v["cpf"]),
+                v["setor"],
+                v["cracha"],
+                v["entrada"],
+            ]
+
             for j, valor in enumerate(valores):
-                self.tabela.setItem(i, j, QTableWidgetItem(str(valor)))
+                self.tabela.setItem(
+                    i,
+                    j,
+                    QTableWidgetItem(str(valor)),
+                )
+
+        self.tabela.setCurrentCell(-1, -1)
 
         self.contador.setText(
-            f"No prédio: {len(self.presentes())} | Crachás livres: {len(self.crachas_livres)}"
+            f"No prédio: {len(self.presentes())} | "
+            f"Crachás livres: {len(self.crachas_livres)}"
         )
 
     def limpar_campos(self):
@@ -172,3 +199,4 @@ class JanelaPrincipal(QWidget):
         self.campo_nome.clear()
         self.combo_setor.setCurrentIndex(0)
         self.campo_cpf.setFocus()
+        self.campo_nome.setReadOnly(False)
