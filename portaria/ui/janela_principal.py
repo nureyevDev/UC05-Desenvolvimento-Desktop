@@ -140,21 +140,44 @@ class JanelaPrincipal(QWidget):
 
     def registrar_saida(self):
         linha = self.tabela.currentRow()
+
         if linha < 0:
-            self.mensagem.setText("Selecione uma visita na tabela.")
+            self.mensagem.setText(
+                "Selecione uma visita na tabela."
+            )
             return
-            visita_id = int(self.tabela.item(linha, 0).text())
+
+        visita_id = int(
+            self.tabela.item(linha, 0).text()
+        )
+
         for visita in self.visitas:
             if visita["id"] == visita_id:
-                visita["saida"] = datetime.now().strftime("%H:%M:%S")
-                self.crachas_livres.append(visita["cracha"])
-                self.mensagem.setText(f"Saída registrada. Crachá {visita['cracha']} devolvido.")
+                visita["saida"] = datetime.now().strftime(
+                    "%H:%M:%S"
+                )
+
+                self.crachas_livres.append(
+                    visita["cracha"]
+                )
+
+                self.crachas_livres.sort()
+
+                self.mensagem.setText(
+                    f"Saída registrada. "
+                    f"Crachá {visita['cracha']} devolvido."
+                )
                 break
+
         self.atualizar_tabela()
-
+        
     def presentes(self):
-        return [v for v in self.visitas if v["saida"] is None]
-
+        return [
+        visita
+        for visita in self.visitas
+        if visita["saida"] is None
+    ]
+        
     def atualizar_tabela(self):
         termo = self.campo_filtro.text().strip().lower()
         linhas = []
@@ -197,6 +220,9 @@ class JanelaPrincipal(QWidget):
     def limpar_campos(self):
         self.campo_cpf.clear()
         self.campo_nome.clear()
-        self.combo_setor.setCurrentIndex(0)
-        self.campo_cpf.setFocus()
         self.campo_nome.setReadOnly(False)
+        self.combo_setor.setCurrentIndex(0)
+        self.mensagem.setText(
+            "Informe o CPF do visitante."
+        )
+        self.campo_cpf.setFocus()
