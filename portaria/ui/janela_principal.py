@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from portaria import repositorio as repo
 import sqlite3
 
 from PySide6.QtWidgets import (
@@ -94,28 +95,19 @@ class JanelaPrincipal(QWidget):
             None,
         )
 
-        linhas = self.conn.execute(
-            """
-            SELECT id, nome
-            FROM setor
-            WHERE ativo = 1
-            ORDER BY nome
-            """
-        ).fetchall()
+        setores = repo.listar_setores_ativos(self.conn)
 
-        for linha in linhas:
+        for setor in setores:
             self.combo_setor.addItem(
-                linha["nome"],
-                linha["id"],
+                setor["nome"],
+                setor["id"],
             )
 
     def buscar_visitante(self):
         cpf = normalizar_documento(self.campo_cpf.text())
-        linha = self.conn.execute(
-            "SELECT nome FROM visitante WHERE documento = ?", (cpf,)
-        ).fetchone()
-        if linha:
-            self.campo_nome.setText(linha["nome"])
+        visitante = repo.buscar_visitante_por_documento(self.conn, cpf)
+        if visitante:
+            self.campo_nome.setText(visitante["nome"])
             self.campo_nome.setReadOnly(True)
             self.mensagem.setText("Visitante já cadastrado. Escolha o setor.")
         else:
@@ -123,126 +115,189 @@ class JanelaPrincipal(QWidget):
 
 
     def registrar_entrada(self):
-        cpf = normalizar_documento(self.campo_cpf.text())
-        nome = " ".join(self.campo_nome.text().split())
+        cpf = normalizar_documento(
+            self.campo_cpf.text()
+        )
+
+        nome = " ".join(
+            self.campo_nome.text().split()
+        )
+
         setor_id = self.combo_setor.currentData()
 
         if not cpf_valido(cpf):
-            self.mensagem.setText("CPF inválido. Confira os 11 dígitos.")
+            self.mensagem.setText(
+                "CPF inválido. Confira os 11 dígitos."
+            )
             self.campo_cpf.setFocus()
             return
+
         if not nome:
-            self.mensagem.setText("Informe o nome do visitante.")
+            self.mensagem.setText(
+                "Informe o nome do visitante."
+            )
             self.campo_nome.setFocus()
             return
+
         if setor_id is None:
-            self.mensagem.setText("Selecione o setor de destino.")
+            self.mensagem.setText(
+                "Selecione o setor de destino."
+            )
+            self.combo_setor.setFocus()
             return
 
         try:
-            with self.conn:  # commit se tudo der certo, rollback se houver exceção
-                visitante = self.conn.execute(
-                    "SELECT id FROM visitante WHERE documento = ?", (cpf,)
-                ).fetchone()
+            with self.conn:
+                visitante = (
+                    repo.buscar_visitante_por_documento(
+                        self.conn,
+                        cpf,
+                    )
+                )
+
                 if visitante is None:
-                    visitante_id = self.conn.execute(
-                        "INSERT INTO visitante (nome, documento) VALUES (?, ?)",
-                        (nome, cpf),
-                    ).lastrowid
+                    visitante_id = repo.inserir_visitante(
+                        self.conn,
+                        nome,
+                        cpf,
+                    )
                 else:
                     visitante_id = visitante["id"]
+                    nome = visitante["nome"]
 
-                aberta = self.conn.execute(
-                    "SELECT 1 FROM visita WHERE visitante_id = ? AND saida IS NULL",
-                    (visitante_id,),
-                ).fetchone()
-                if aberta:
-                    self.mensagem.setText(f"{nome} já está no prédio. Registre a saída antes.")
-                    return
+                visita_aberta = repo.buscar_visita_aberta(
+                    self.conn,
+                    visitante_id,
+                )
 
-                cracha = self.conn.execute(
-                    "SELECT id, codigo FROM cracha WHERE situacao = 'disponivel' "
-                    "ORDER BY codigo LIMIT 1"
-                ).fetchone()
+                if visita_aberta:
+                    raise ValueError(
+                        f"{nome} já está no prédio. "
+                        "Registre a saída antes."
+                    )
+
+                setor = repo.obter_setor(
+                    self.conn,
+                    setor_id,
+                )
+
+                quantidade_presentes = (
+                    repo.contar_presentes_no_setor(
+                        self.conn,
+                        setor_id,
+                    )
+                )
+
+                if (
+                    setor["lotacao_maxima"] is not None
+                    and quantidade_presentes
+                    >= setor["lotacao_maxima"]
+                ):
+                    raise ValueError(
+                        "O setor atingiu a lotação máxima."
+                    )
+
+                cracha = repo.buscar_cracha_disponivel(
+                    self.conn
+                )
+
                 if cracha is None:
-                    self.mensagem.setText("Não há crachá disponível. Aguarde uma devolução.")
-                    return
+                    raise ValueError(
+                        "Não há crachá disponível. "
+                        "Aguarde uma devolução."
+                    )
 
-                self.conn.execute(
-                    "INSERT INTO visita (visitante_id, setor_id, cracha_id, entrada) "
-                    "VALUES (?, ?, ?, ?)",
-                    (visitante_id, setor_id, cracha["id"], agora()),
+                repo.inserir_visita(
+                    self.conn,
+                    visitante_id,
+                    setor_id,
+                    cracha["id"],
+                    agora(),
                 )
-                self.conn.execute(
-                    "UPDATE cracha SET situacao = 'em_uso' WHERE id = ?", (cracha["id"],)
+
+                repo.atualizar_situacao_cracha(
+                    self.conn,
+                    cracha["id"],
+                    "em_uso",
                 )
-        except sqlite3.Error as erro:
-            QMessageBox.critical(self, "Portaria Digital", f"Erro no banco: {erro}")
+
+        except (sqlite3.Error, ValueError) as erro:
+            QMessageBox.warning(
+                self,
+                "Não foi possível registrar",
+                str(erro),
+            )
             return
 
         self.limpar_campos()
-        self.mensagem.setText(f"Entrada registrada. Entregue o crachá {cracha['codigo']}.")
+
+        self.mensagem.setText(
+            f"Entrada registrada. Entregue o "
+            f"crachá {cracha['codigo']}."
+        )
+
         self.atualizar_tabela()
 
     def registrar_saida(self):
         linha = self.tabela.currentRow()
+
         if linha < 0:
-            self.mensagem.setText("Selecione uma visita na tabela.")
+            self.mensagem.setText(
+                "Selecione uma visita na tabela."
+            )
             return
-        visita_id = int(self.tabela.item(linha, 0).text())
+
+        visita_id = int(
+            self.tabela.item(linha, 0).text()
+        )
 
         try:
             with self.conn:
-                visita = self.conn.execute(
-                    "SELECT cracha_id FROM visita WHERE id = ? AND saida IS NULL",
-                    (visita_id,),
-                ).fetchone()
+                visita = repo.buscar_visita_aberta_por_id(
+                    self.conn,
+                    visita_id,
+                )
+
                 if visita is None:
-                    self.mensagem.setText("Esta visita já foi encerrada.")
-                    return
-                self.conn.execute(
-                    "UPDATE visita SET saida = ? WHERE id = ?", (agora(), visita_id)
+                    raise ValueError(
+                        "A visita selecionada não está aberta."
+                    )
+
+                repo.registrar_saida_visita(
+                    self.conn,
+                    visita_id,
+                    agora(),
                 )
-                self.conn.execute(
-                    "UPDATE cracha SET situacao = 'disponivel' WHERE id = ?",
-                    (visita["cracha_id"],),
+
+                repo.atualizar_situacao_cracha(
+                    self.conn,
+                    visita["cracha_id"],
+                    "disponivel",
                 )
-        except sqlite3.Error as erro:
-            QMessageBox.critical(self, "Portaria Digital", f"Erro no banco: {erro}")
+
+        except (sqlite3.Error, ValueError) as erro:
+            QMessageBox.warning(
+                self,
+                "Não foi possível registrar a saída",
+                str(erro),
+            )
             return
 
-        self.mensagem.setText("Saída registrada. Crachá devolvido.")
+        self.mensagem.setText(
+            f"Saída registrada. Crachá "
+            f"{visita['codigo']} devolvido."
+        )
+
         self.atualizar_tabela()
         
         
     def atualizar_tabela(self):
-        termo = f"%{self.campo_filtro.text().strip()}%"
+        filtro = self.campo_filtro.text().strip()
 
-        linhas = self.conn.execute(
-            """
-            SELECT
-                v.id,
-                p.nome,
-                p.documento AS cpf,
-                s.nome AS setor,
-                c.codigo AS cracha,
-                v.entrada
-            FROM visita v
-            JOIN visitante p
-                ON p.id = v.visitante_id
-            JOIN setor s
-                ON s.id = v.setor_id
-            JOIN cracha c
-                ON c.id = v.cracha_id
-            WHERE v.saida IS NULL
-              AND (
-                    p.nome LIKE ?
-                    OR s.nome LIKE ?
-                  )
-            ORDER BY v.entrada
-            """,
-            (termo, termo),
-        ).fetchall()
+        linhas = repo.listar_presentes(
+            self.conn,
+            filtro,
+        )
 
         self.tabela.setRowCount(len(linhas))
 
@@ -265,13 +320,11 @@ class JanelaPrincipal(QWidget):
 
         self.tabela.setCurrentCell(-1, -1)
 
-        quantidade_livres = self.conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM cracha
-            WHERE situacao = 'disponivel'
-            """
-        ).fetchone()[0]
+        quantidade_livres = (
+            repo.contar_crachas_disponiveis(
+                self.conn
+            )
+        )
 
         self.contador.setText(
             f"No prédio: {len(linhas)} | "
