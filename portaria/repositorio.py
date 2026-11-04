@@ -15,6 +15,28 @@ def buscar_visitante_por_documento(conn, documento: str) -> Linha | None:
         "SELECT id, nome, documento FROM visitante WHERE documento = ?", (documento,)
     ).fetchone()
 
+def historico_do_visitante(
+    conn,
+    documento: str,
+    limite: int = 10,
+) -> list:
+    return conn.execute(
+        """
+        SELECT
+            s.nome AS setor,
+            v.entrada,
+            v.saida
+        FROM visita v
+        JOIN visitante p
+            ON p.id = v.visitante_id
+        JOIN setor s
+            ON s.id = v.setor_id
+        WHERE p.documento = ?
+        ORDER BY v.entrada DESC
+        LIMIT ?
+        """,
+        (documento, limite),
+    ).fetchall()
 
 # ---------- setor ----------
 
