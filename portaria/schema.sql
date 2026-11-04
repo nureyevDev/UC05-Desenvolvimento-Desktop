@@ -1,7 +1,3 @@
--- Portaria Digital: esquema SQLite.
--- As regras críticas existem também no banco (defesa em profundidade):
--- a aplicação valida antes, o banco recusa se algo escapar.
-
 CREATE TABLE IF NOT EXISTS setor (
     id              INTEGER PRIMARY KEY,
     nome            TEXT    NOT NULL UNIQUE,
