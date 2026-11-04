@@ -22,32 +22,90 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
-    QMessageBox, 
+    QMessageBox,
+    QDateEdit,
+    QMainWindow,
+    QTabWidget, 
 )
 
+from PySide6.QtCore import QDate
 
 COLUNAS = ["Visita", "Nome", "CPF", "Setor", "Crachá", "Entrada"]
 
+COLUNAS_HISTORICO = ["Visita", "Nome", "CPF", "Setor", "Crachá", "Entrada", "Saída", "Min."]
 
-from portaria.validacao import cpf_valido, mascarar_documento, normalizar_documento
+
+def nova_tabela(colunas):
+    tabela = QTableWidget(0, len(colunas))
+    tabela.setHorizontalHeaderLabels(colunas)
+    tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
+    tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
+    tabela.setSelectionMode(QAbstractItemView.SingleSelection)
+    tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    tabela.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+    tabela.verticalHeader().setVisible(False)
+    return tabela
 
 
-class JanelaPrincipal(QWidget):
+def preencher_tabela(tabela, linhas):
+    tabela.setRowCount(len(linhas))
+    for i, valores in enumerate(linhas):
+        for j, valor in enumerate(valores):
+            tabela.setItem(i, j, QTableWidgetItem("" if valor is None else str(valor)))
+    tabela.setCurrentCell(-1, -1)
+
+
+class JanelaPrincipal(QMainWindow):
     def __init__(self, conn):
         super().__init__()
+
         self.conn = conn
 
-        self.resize(820, 520)
+        self.setWindowTitle("Portaria Digital")
+        self.resize(900, 560)
 
+        abas = QTabWidget()
+
+        abas.addTab(
+            self.montar_aba_portaria(),
+            "&Portaria",
+        )
+
+        abas.addTab(
+            self.montar_aba_historico(),
+            "&Histórico",
+        )
+
+        abas.currentChanged.connect(
+            self.atualizar_tudo
+        )
+
+        self.setCentralWidget(abas)
+
+        self.atualizar_tudo()
         
+    def montar_aba_portaria(self):
+        aba = QWidget()
+
         self.campo_cpf = QLineEdit()
-        self.campo_cpf.setPlaceholderText("Somente números")
+        self.campo_cpf.setPlaceholderText(
+            "Somente números"
+        )
         self.campo_cpf.setMaxLength(14)
+
         self.campo_nome = QLineEdit()
         self.combo_setor = QComboBox()
-        self.botao_entrada = QPushButton("Registrar entrada")
-        self.botao_limpar = QPushButton("Limpar campos")
-        self.mensagem = QLabel("Informe o CPF do visitante.")
+
+        self.botao_entrada = QPushButton(
+            "Registrar entrada"
+        )
+        self.botao_limpar = QPushButton(
+            "Limpar campos"
+        )
+
+        self.mensagem = QLabel(
+            "Informe o CPF do visitante."
+        )
 
         formulario = QFormLayout()
         formulario.addRow("CPF:", self.campo_cpf)
@@ -58,17 +116,17 @@ class JanelaPrincipal(QWidget):
         botoes.addWidget(self.botao_entrada)
         botoes.addWidget(self.botao_limpar)
 
-       
         self.campo_filtro = QLineEdit()
-        self.campo_filtro.setPlaceholderText("Filtrar por nome ou setor")
-        self.tabela = QTableWidget(0, len(COLUNAS))
-        self.tabela.setHorizontalHeaderLabels(COLUNAS)
-        self.tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.tabela.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tabela.verticalHeader().setVisible(False)
-        self.botao_saida = QPushButton("Registrar saída da visita selecionada")
+        self.campo_filtro.setPlaceholderText(
+            "Filtrar por nome ou setor"
+        )
+
+        self.tabela = nova_tabela(COLUNAS)
+
+        self.botao_saida = QPushButton(
+            "Registrar saída da visita selecionada"
+        )
+
         self.contador = QLabel()
 
         layout = QVBoxLayout()
@@ -80,18 +138,28 @@ class JanelaPrincipal(QWidget):
         layout.addWidget(self.tabela)
         layout.addWidget(self.botao_saida)
         layout.addWidget(self.contador)
-        self.setLayout(layout)
 
-       
-        self.campo_cpf.editingFinished.connect(self.buscar_visitante)
-        self.botao_entrada.clicked.connect(self.registrar_entrada)
-        self.botao_limpar.clicked.connect(self.limpar_campos)
-        self.botao_saida.clicked.connect(self.registrar_saida)
-        self.campo_filtro.textChanged.connect(self.atualizar_tabela)
+        aba.setLayout(layout)
 
-        self.atualizar_tudo()
+        self.campo_cpf.editingFinished.connect(
+            self.buscar_visitante
+        )
+        self.botao_entrada.clicked.connect(
+            self.registrar_entrada
+        )
+        self.botao_limpar.clicked.connect(
+            self.limpar_campos
+        )
+        self.botao_saida.clicked.connect(
+            self.registrar_saida
+        )
+        self.campo_filtro.textChanged.connect(
+            self.atualizar_tabela
+        )
+
+        return aba
         
-    def atualizar_tudo(self):
+    def atualizar_tudo(self, indice=None):
         self.carregar_setores()
         self.atualizar_tabela()
 
@@ -223,54 +291,95 @@ class JanelaPrincipal(QWidget):
         )
 
         self.atualizar_tudo()
+        
+    def montar_aba_historico(self):
+        hoje = QDate.currentDate()
+
+        self.data_inicio = QDateEdit(
+            hoje.addDays(-7)
+        )
+        self.data_fim = QDateEdit(hoje)
+
+        for campo in (
+            self.data_inicio,
+            self.data_fim,
+        ):
+            campo.setCalendarPopup(True)
+            campo.setDisplayFormat("dd/MM/yyyy")
+
+        self.campo_busca = QLineEdit()
+        self.campo_busca.setPlaceholderText(
+            "Nome ou setor"
+        )
+
+        botao_filtrar = QPushButton("&Filtrar")
+
+        self.tabela_historico = nova_tabela(
+            COLUNAS_HISTORICO
+        )
+
+        self.resumo = QLabel()
+        self.resumo.setWordWrap(True)
+
+        botao_filtrar.clicked.connect(
+            self.atualizar_historico
+        )
+        self.campo_busca.returnPressed.connect(
+            self.atualizar_historico
+        )
+
+        filtros = QHBoxLayout()
+        filtros.addWidget(QLabel("De:"))
+        filtros.addWidget(self.data_inicio)
+        filtros.addWidget(QLabel("Até:"))
+        filtros.addWidget(self.data_fim)
+        filtros.addWidget(self.campo_busca, 1)
+        filtros.addWidget(botao_filtrar)
+
+        layout = QVBoxLayout()
+        layout.addLayout(filtros)
+        layout.addWidget(self.tabela_historico)
+        layout.addWidget(self.resumo)
+
+        aba = QWidget()
+        aba.setLayout(layout)
+
+        return aba
 
     def atualizar_tudo(self):
         self.carregar_setores()
         self.atualizar_tabela()
+        self.atualizar_historico()
 
     def atualizar_tabela(self):
         presentes = repo.listar_presentes(self.conn)
         termo = self.campo_filtro.text().strip().lower()
-
-        linhas = [
-            linha
-            for linha in presentes
-            if termo
-            in f"{linha['nome']} {linha['setor']}".lower()
-        ]
-
-        self.tabela.setRowCount(len(linhas))
-
-        for i, linha in enumerate(linhas):
-            valores = [
-                linha["id"],
-                linha["nome"],
-                mascarar_documento(
-                    linha["documento"]
-                ),
-                linha["setor"],
-                linha["cracha"],
-                linha["entrada"],
-            ]
-
-            for j, valor in enumerate(valores):
-                self.tabela.setItem(
-                    i,
-                    j,
-                    QTableWidgetItem(str(valor)),
-                )
-
-        self.tabela.setCurrentCell(-1, -1)
-
-        crachas = repo.contar_crachas_por_situacao(
-            self.conn
-        )
-
+        preencher_tabela(self.tabela, [
+            [l["id"], l["nome"], mascarar_documento(l["documento"]),
+             l["setor"], l["cracha"], l["entrada"]]
+            for l in presentes if termo in f"{l['nome']} {l['setor']}".lower()
+        ])
+        crachas = repo.contar_crachas_por_situacao(self.conn)
         self.contador.setText(
-            f"No prédio: {len(presentes)} | "
-            f"Crachás livres: "
-            f"{crachas.get('disponivel', 0)}"
+            f"No prédio: {len(presentes)} | Crachás livres: {crachas.get('disponivel', 0)}"
         )
+
+    def atualizar_historico(self):
+        inicio = self.data_inicio.date().toString("yyyy-MM-dd")
+        fim = self.data_fim.date().toString("yyyy-MM-dd")
+        linhas = repo.listar_historico(self.conn, inicio, fim, self.campo_busca.text())
+        preencher_tabela(self.tabela_historico, [
+            [l["id"], l["nome"], mascarar_documento(l["documento"]), l["setor"],
+             l["cracha"], l["entrada"], l["saida"] or "no prédio", l["minutos"]]
+            for l in linhas
+        ])
+        partes = []
+        for r in repo.resumo_por_setor(self.conn, inicio, fim):
+            texto = f"{r['setor']}: {r['visitas']} visita(s)"
+            if r["media_minutos"] is not None:
+                texto += f", média de {r['media_minutos']} min"
+            partes.append(texto)
+        self.resumo.setText("Resumo do período. " + "; ".join(partes))
         
     def limpar_campos(self):
         self.campo_cpf.clear()
