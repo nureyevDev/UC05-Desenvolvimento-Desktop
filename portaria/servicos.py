@@ -8,7 +8,12 @@ from datetime import datetime
 
 from portaria import repositorio as repo
 from portaria.erros import RegraNegocioErro
-from portaria.validacao import cpf_valido, normalizar_documento, normalizar_nome
+from portaria.validacao import (
+    cpf_valido,
+    normalizar_documento,
+    normalizar_nome,
+)
+
 
 
 def agora() -> str:
@@ -27,41 +32,94 @@ def cadastrar_visitante(conn, nome: str, documento: str) -> int:
     with conn:  # commit no sucesso, rollback em exceção
         return repo.inserir_visitante(conn, nome, doc)
 
+def registrar_entrada(
+    conn,
+    documento: str,
+    setor_id: int,
+    motivo: str = "",
+    momento: str | None = None,
+    nome: str | None = None,
+) -> int:
+    """Cria a entrada e ocupa um crachá na mesma transação."""
 
-def registrar_entrada(conn, documento: str, setor_id: int, motivo: str = "",
-                      momento: str | None = None) -> int:
-    """Check-in: cria a visita E ocupa um crachá na MESMA transação (RN03)."""
     doc = normalizar_documento(documento)
-    visitante = repo.buscar_visitante_por_documento(conn, doc)
-    if visitante is None:
-        raise RegraNegocioErro("Visitante não cadastrado. Cadastre antes da entrada.")
+    momento = momento or agora()
 
     setor = repo.obter_setor(conn, setor_id)
-    if setor is None or not setor["ativo"]:
-        raise RegraNegocioErro("Selecione um setor de destino válido.")
 
-    # Aplicação desktop monousuário: as leituras abaixo e a escrita ficam no
-    # mesmo bloco. Com vários terminais no mesmo banco, discutir BEGIN IMMEDIATE.
+    if setor is None or not setor["ativo"]:
+        raise RegraNegocioErro(
+            "Selecione um setor de destino válido."
+        )
+
     with conn:
-        if repo.visita_aberta_do_visitante(conn, visitante["id"]):
-            raise RegraNegocioErro(
-                f"{visitante['nome']} já está no prédio. Registre a saída antes."
+        visitante = repo.buscar_visitante_por_documento(
+            conn,
+            doc,
+        )
+
+        if visitante is None:
+            nome_normalizado = normalizar_nome(nome)
+
+            if not nome_normalizado:
+                raise RegraNegocioErro(
+                    "Visitante não cadastrado. Informe o nome."
+                )
+
+            if not cpf_valido(doc):
+                raise RegraNegocioErro(
+                    "CPF inválido."
+                )
+
+            visitante_id = repo.inserir_visitante(
+                conn,
+                nome_normalizado,
+                doc,
             )
-        if repo.contar_presentes_no_setor(conn, setor_id) >= setor["lotacao_maxima"]:
+        else:
+            visitante_id = visitante["id"]
+
+        if repo.visita_aberta_do_visitante(
+            conn,
+            visitante_id,
+        ):
             raise RegraNegocioErro(
-                f"{setor['nome']} atingiu a lotação de {setor['lotacao_maxima']} visitantes."
+                "O visitante já está no prédio."
             )
+
+        presentes = repo.contar_presentes_no_setor(
+            conn,
+            setor_id,
+        )
+
+        if presentes >= setor["lotacao_maxima"]:
+            raise RegraNegocioErro(
+                "O setor atingiu a lotação máxima."
+            )
+
         cracha = repo.buscar_cracha_disponivel(conn)
+
         if cracha is None:
-            raise RegraNegocioErro("Não há crachá disponível. Aguarde uma devolução.")
+            raise RegraNegocioErro(
+                "Não há crachá disponível."
+            )
 
         visita_id = repo.inserir_visita(
-            conn, visitante["id"], setor_id, cracha["id"],
-            normalizar_nome(motivo) or None, momento or agora(),
+            conn,
+            visitante_id,
+            setor_id,
+            cracha["id"],
+            motivo,
+            momento,
         )
-        repo.atualizar_situacao_cracha(conn, cracha["id"], "em_uso")
-    return visita_id
 
+        repo.atualizar_situacao_cracha(
+            conn,
+            cracha["id"],
+            "em_uso",
+        )
+
+        return visita_id
 
 def registrar_saida(conn, visita_id: int, momento: str | None = None) -> None:
     """Check-out: encerra a visita E devolve o crachá na mesma transação."""
@@ -85,14 +143,14 @@ def salvar_setor(conn, nome: str, lotacao_maxima: int, ativo: bool = True,
     """Cria (setor_id=None) ou altera um setor, aplicando as regras de cadastro."""
     nome = normalizar_nome(nome)
     if not nome:
-        raise RegraNegocioError("Informe o nome do setor.")
+        raise RegraNegocioErro("Informe o nome do setor.")
     if lotacao_maxima < 1:
-        raise RegraNegocioError("A lotação máxima precisa ser de pelo menos 1 visitante.")
+        raise RegraNegocioErro("A lotação máxima precisa ser de pelo menos 1 visitante.")
 
     # Comparação em Python: o lower() do SQLite não trata letras acentuadas.
     for s in repo.listar_setores(conn):
         if s["nome"].casefold() == nome.casefold() and s["id"] != setor_id:
-            raise RegraNegocioError(f"Já existe o setor {s['nome']}.")
+            raise RegraNegocioErro(f"Já existe o setor {s['nome']}.")
 
     with conn:
         if setor_id is None:
@@ -100,12 +158,12 @@ def salvar_setor(conn, nome: str, lotacao_maxima: int, ativo: bool = True,
 
         presentes = repo.contar_presentes_no_setor(conn, setor_id)
         if lotacao_maxima < presentes:
-            raise RegraNegocioError(
+            raise RegraNegocioErro(
                 f"Há {presentes} visitante(s) no setor agora. "
                 "A lotação não pode ficar abaixo disso."
             )
         if not ativo and presentes:
-            raise RegraNegocioError("Não é possível desativar um setor com visitantes no prédio.")
+            raise RegraNegocioErro("Não é possível desativar um setor com visitantes no prédio.")
         repo.atualizar_setor(conn, setor_id, nome, lotacao_maxima, ativo)
         return setor_id
 
@@ -114,7 +172,7 @@ def excluir_setor(conn, setor_id: int) -> None:
     """Exclusão protegida: setor com histórico de visitas só pode ser desativado."""
     with conn:
         if repo.contar_visitas_do_setor(conn, setor_id):
-            raise RegraNegocioError(
+            raise RegraNegocioErro(
                 "Este setor tem histórico de visitas e não pode ser excluído. Desative-o."
             )
         repo.excluir_setor(conn, setor_id)
