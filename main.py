@@ -1,10 +1,16 @@
 import logging
 import sys
 
+from PySide6.QtCore import (
+    QLibraryInfo,
+    QLocale,
+    QTranslator,
+)
 from PySide6.QtWidgets import QApplication
 
 from portaria.db import conectar, preparar_banco
 from portaria.ui.janela_principal import JanelaPrincipal
+from portaria.ui.tema import gerar_folha, tema_salvo
 
 
 def main():
@@ -18,6 +24,32 @@ def main():
     preparar_banco(conn)
 
     app = QApplication(sys.argv)
+
+    # Traduz os botões padrão do Qt para português.
+    tradutor = QTranslator(app)
+
+    pasta_traducoes = QLibraryInfo.path(
+        QLibraryInfo.LibraryPath.TranslationsPath
+    )
+
+    if tradutor.load(
+        QLocale(
+            QLocale.Language.Portuguese,
+            QLocale.Country.Brazil,
+        ),
+        "qtbase",
+        "_",
+        pasta_traducoes,
+    ):
+        app.installTranslator(tradutor)
+
+    # Mantém a mesma base visual nos sistemas operacionais.
+    app.setStyle("Fusion")
+
+    # Aplica o tema escolhido anteriormente.
+    app.setStyleSheet(
+        gerar_folha(tema_salvo())
+    )
 
     janela = JanelaPrincipal(conn)
     janela.show()
