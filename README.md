@@ -1,6 +1,4 @@
-"# UC05-Desenvolvimento-Descktop" 
-
-# Registro de Visitantes
+# Projeto pessoal "Registro de Visitantes"
 
 Aplicação desktop desenvolvida em Python com PySide6 para registrar visitantes e seus respectivos setores de destino.
 
