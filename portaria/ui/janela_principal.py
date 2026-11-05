@@ -1,7 +1,7 @@
 import logging
 import sqlite3
 
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -158,18 +158,42 @@ class JanelaPrincipal(QMainWindow):
         self.atualizar_tudo()
         
     def montar_menu(self):
-        menu = self.menuBar().addMenu("&Exibir")
-        self.acao_tema_escuro = QAction("Tema &escuro", self)
-        self.acao_tema_escuro.setCheckable(True)
-        self.acao_tema_escuro.setShortcut("Ctrl+T")
-        self.acao_tema_escuro.setChecked(tema_salvo() == "escuro")
-        self.acao_tema_escuro.toggled.connect(self.trocar_tema)
-        menu.addAction(self.acao_tema_escuro)
+        menu_exibir = self.menuBar().addMenu("&Exibir")
+        menu_temas = menu_exibir.addMenu("&Tema")
 
-    def trocar_tema(self, escuro):
-        nome = "escuro" if escuro else "claro"
-        QApplication.instance().setStyleSheet(gerar_folha(nome))
-        salvar_tema(nome)
+        grupo = QActionGroup(self)
+        grupo.setExclusive(True)
+
+        temas = {
+            "claro": "Claro",
+            "escuro": "Escuro",
+            "tema_nureyev": "Tema Nureyev",
+        }
+
+        tema_atual = tema_salvo()
+
+        for nome, titulo in temas.items():
+            acao = QAction(titulo, self)
+            acao.setCheckable(True)
+            acao.setData(nome)
+            acao.setChecked(nome == tema_atual)
+
+            acao.triggered.connect(
+                lambda marcado, tema=nome:
+                self.trocar_tema(tema)
+            )
+
+            grupo.addAction(acao)
+            menu_temas.addAction(acao)
+
+        self.grupo_temas = grupo
+
+    def trocar_tema(self, nome_tema):
+        QApplication.instance().setStyleSheet(
+            gerar_folha(nome_tema)
+        )
+
+        salvar_tema(nome_tema)
 
     def montar_aba_portaria(self):
         aba = QWidget()

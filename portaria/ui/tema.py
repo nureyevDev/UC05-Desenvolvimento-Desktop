@@ -47,6 +47,25 @@ TEMAS = {
         "selecao": "#1f4a7a",
         "raio": "6px",
     },
+        "tema_nureyev": {
+        "fundo": "#101827",
+        "superficie": "#182338",
+        "texto": "#f1f5fb",
+        "texto_suave": "#b4c0d4",
+        "borda": "#34435e",
+        "primaria": "#3867d6",
+        "primaria_hover": "#4b7bec",
+        "primaria_texto": "#ffffff",
+        "perigo": "#dc5a64",
+        "perigo_texto": "#ffffff",
+        "foco": "#82aaff",
+        "aviso_fundo": "#1c3155",
+        "aviso_borda": "#466ca6",
+        "aviso_texto": "#dce9ff",
+        "zebra": "#1d2a42",
+        "selecao": "#294b7a",
+        "raio": "8px",
+    },
 }
 
 

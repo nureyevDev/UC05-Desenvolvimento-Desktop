@@ -3,6 +3,35 @@
    valor do tema em tema.py. Não use cifrão em comentários. */
 
 /* ---------- base ---------- */
+* {
+    font-family: "Segoe UI";
+    font-size: 10pt;
+}
+
+QPushButton,
+QTabBar::tab,
+QHeaderView::section,
+QMenuBar,
+QMenu {
+    font-family: "Segoe UI Semibold";
+}
+QPushButton {
+    min-height: 32px;
+    padding: 6px 14px;
+}
+
+QLineEdit,
+QComboBox,
+QDateEdit {
+    min-height: 30px;
+    padding: 4px 8px;
+}
+
+QTabBar::tab {
+    min-width: 100px;
+    padding: 10px 18px;
+}
+
 QWidget {
     font-size: 11pt;
     color: $texto;
